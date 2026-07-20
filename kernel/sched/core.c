@@ -917,10 +917,9 @@ unsigned int uclamp_rq_max_value(struct rq *rq, enum uclamp_id clamp_id,
 }
 
 static inline struct uclamp_se
-uclamp_tg_restrict(struct task_struct *p, enum uclamp_id clamp_id)
+uclamp_tg_restrict(struct task_struct *p, enum uclamp_id clamp_id,
+		   struct uclamp_se uc_req)
 {
-	/* Copy by value as we could modify it */
-	struct uclamp_se uc_req = p->uclamp_req[clamp_id];
 #ifdef CONFIG_UCLAMP_TASK_GROUP
 	unsigned int tg_min, tg_max, value;
 
@@ -954,8 +953,16 @@ uclamp_tg_restrict(struct task_struct *p, enum uclamp_id clamp_id)
 static inline struct uclamp_se
 uclamp_eff_get(struct task_struct *p, enum uclamp_id clamp_id)
 {
-	struct uclamp_se uc_req = uclamp_tg_restrict(p, clamp_id);
+	/* Copy by value as we could modify it */
+	struct uclamp_se uc_req = p->uclamp_req[clamp_id];
 	struct uclamp_se uc_max = uclamp_default[clamp_id];
+	unsigned int value = uc_req.value;
+
+	trace_android_rvh_uclamp_eff_value(p, clamp_id, &value);
+	value = min_t(unsigned int, value, SCHED_CAPACITY_SCALE);
+	if (value != uc_req.value)
+		uclamp_se_set(&uc_req, value, uc_req.user_defined);
+	uc_req = uclamp_tg_restrict(p, clamp_id, uc_req);
 
 	/* System default restrictions always apply */
 	if (unlikely(uc_req.value > uc_max.value))
@@ -1180,6 +1187,18 @@ uclamp_update_active(struct task_struct *p)
 
 	task_rq_unlock(rq, p, &rf);
 }
+
+void android_uclamp_update_active(struct task_struct *p)
+{
+	uclamp_update_active(p);
+}
+EXPORT_SYMBOL_GPL(android_uclamp_update_active);
+
+void android_uclamp_enable(void)
+{
+	static_branch_enable(&sched_uclamp_used);
+}
+EXPORT_SYMBOL_GPL(android_uclamp_enable);
 
 #ifdef CONFIG_UCLAMP_TASK_GROUP
 static inline void
@@ -5778,6 +5797,7 @@ long sched_setaffinity(pid_t pid, const struct cpumask *in_mask)
 	cpumask_var_t cpus_allowed, new_mask;
 	struct task_struct *p;
 	int retval;
+	bool skip = false;
 #ifdef CONFIG_SCHED_WALT
 	int dest_cpu;
 	cpumask_t allowed_mask;
@@ -5821,6 +5841,9 @@ long sched_setaffinity(pid_t pid, const struct cpumask *in_mask)
 	if (retval)
 		goto out_free_new_mask;
 
+	trace_android_vh_sched_setaffinity_early(p, in_mask, &skip);
+	if (skip)
+		goto out_free_new_mask;
 
 	cpuset_cpus_allowed(p, cpus_allowed);
 	cpumask_and(new_mask, in_mask, cpus_allowed);

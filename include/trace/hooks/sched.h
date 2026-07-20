@@ -11,6 +11,8 @@
  * mechanism for vendor modules to hook and extend functionality
  */
 struct task_struct;
+struct cpumask;
+struct cpufreq_policy;
 DECLARE_RESTRICTED_HOOK(android_rvh_select_task_rq_fair,
 	TP_PROTO(struct task_struct *p, int prev_cpu, int sd_flag, int wake_flags, int *new_cpu),
 	TP_ARGS(p, prev_cpu, sd_flag, wake_flags, new_cpu), 1);
@@ -27,6 +29,19 @@ struct rq;
 DECLARE_HOOK(android_vh_scheduler_tick,
 	TP_PROTO(struct rq *rq),
 	TP_ARGS(rq));
+
+DECLARE_RESTRICTED_HOOK(android_rvh_update_cpu_capacity,
+	TP_PROTO(int cpu, unsigned long *capacity),
+	TP_ARGS(cpu, capacity), 1);
+
+DECLARE_RESTRICTED_HOOK(android_rvh_uclamp_eff_value,
+	TP_PROTO(struct task_struct *p, unsigned int clamp_id,
+		 unsigned int *value),
+	TP_ARGS(p, clamp_id, value), 1);
+
+DECLARE_HOOK(android_vh_dynamic_svp_preempt,
+	TP_PROTO(struct task_struct *p, struct task_struct *curr, bool *preempt),
+	TP_ARGS(p, curr, preempt));
 
 DECLARE_RESTRICTED_HOOK(android_rvh_enqueue_task,
 	TP_PROTO(struct rq *rq, struct task_struct *p),
@@ -65,6 +80,10 @@ DECLARE_RESTRICTED_HOOK(android_rvh_setscheduler,
 	TP_PROTO(struct task_struct *p),
 	TP_ARGS(p), 1);
 
+DECLARE_HOOK(android_vh_sched_setaffinity_early,
+	TP_PROTO(struct task_struct *p, const struct cpumask *new_mask, bool *skip),
+	TP_ARGS(p, new_mask, skip));
+
 struct sched_group;
 DECLARE_RESTRICTED_HOOK(android_rvh_find_busiest_group,
 	TP_PROTO(struct sched_group *busiest, struct rq *dst_rq, int *out_balance),
@@ -72,8 +91,9 @@ DECLARE_RESTRICTED_HOOK(android_rvh_find_busiest_group,
 
 DECLARE_HOOK(android_vh_map_util_freq,
 	TP_PROTO(unsigned long util, unsigned long freq,
-		unsigned long cap, unsigned long *next_freq),
-	TP_ARGS(util, freq, cap, next_freq));
+		unsigned long cap, unsigned long *next_freq,
+		struct cpufreq_policy *policy, bool *need_freq_update),
+	TP_ARGS(util, freq, cap, next_freq, policy, need_freq_update));
 
 struct em_perf_domain;
 DECLARE_HOOK(android_vh_em_pd_energy,
