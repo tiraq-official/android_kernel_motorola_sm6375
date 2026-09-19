@@ -108,8 +108,7 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/task.h>
-EXPORT_TRACEPOINT_SYMBOL_GPL(task_newtask);
-EXPORT_TRACEPOINT_SYMBOL_GPL(task_rename);
+
 /*
  * Minimum number of threads to boot the kernel
  */

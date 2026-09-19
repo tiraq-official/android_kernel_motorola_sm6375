@@ -22,7 +22,6 @@
 #include <linux/security.h>
 #include <linux/sort.h>
 #include <soc/qcom/boot_stats.h>
-#include <trace/hooks/gpu.h>
 
 #include "kgsl_compat.h"
 #include "kgsl_debugfs.h"
@@ -2184,8 +2183,7 @@ long kgsl_ioctl_drawctxt_create(struct kgsl_device_private *dev_priv,
 	struct kgsl_drawctxt_create *param = data;
 	struct kgsl_context *context = NULL;
 	struct kgsl_device *device = dev_priv->device;
-	
-	trace_android_vh_gpu_context_create(param->flags);
+
 	context = device->ftbl->drawctxt_create(dev_priv, &param->flags);
 	if (IS_ERR(context)) {
 		result = PTR_ERR(context);
