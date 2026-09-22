@@ -184,7 +184,7 @@ extern uint sched_burst_fork_atavistic;
 extern uint sched_burst_penalty_offset;
 extern uint sched_burst_penalty_scale;
 extern uint sched_burst_cache_lifetime;
-static int three = 3;
+static int bore_three = 3;
 static int __maybe_unused sixty_four     = 64;
 static int __maybe_unused maxval_12_bits = 4095;
 #endif // CONFIG_SCHED_BORE
@@ -1672,7 +1672,7 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler = proc_douintvec_minmax,
 		.extra1		= SYSCTL_ZERO,
-		.extra2		= &three,
+		.extra2		= &bore_three,
 	},
 	{
 		.procname	= "sched_burst_penalty_offset",
