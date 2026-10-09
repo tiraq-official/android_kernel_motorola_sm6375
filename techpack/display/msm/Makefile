@@ -53,6 +53,7 @@ msm_drm-$(CONFIG_DRM_MSM_SDE) += sde/sde_crtc.o \
 	sde_io_util.o \
 	sde_vm_event.o \
 	sde/sde_hw_reg_dma_v1_color_proc.o \
+	sde/sde_hw_kcal_ctrl.o \
 	sde/sde_hw_color_proc_v4.o \
 	sde/sde_hw_ad4.o \
 	sde/sde_hw_uidle.o \
