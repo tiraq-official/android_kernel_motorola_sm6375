@@ -7,6 +7,7 @@
 #include "sde_reg_dma.h"
 #include "sde_hw_reg_dma_v1_color_proc.h"
 #include "sde_hw_color_proc_common_v4.h"
+#include "sde_hw_kcal_ctrl.h"
 #include "sde_hw_ctl.h"
 #include "sde_hw_sspp.h"
 #include "sde_hwio.h"
@@ -1295,6 +1296,7 @@ void reg_dmav1_setup_dspp_pcc_common(struct sde_hw_dspp *ctx, void *cfg)
 	struct sde_reg_dma_setup_ops_cfg dma_write_cfg;
 	struct drm_msm_pcc *pcc_cfg;
 	struct drm_msm_pcc_coeff *coeffs = NULL;
+	struct sde_hw_kcal *kcal = sde_hw_kcal_get();
 	u32 *data = NULL;
 	int rc, i = 0;
 	u32 reg = 0;
@@ -1372,6 +1374,10 @@ void reg_dmav1_setup_dspp_pcc_common(struct sde_hw_dspp *ctx, void *cfg)
 		data[i + 3] = coeffs->r;
 		data[i + 6] = coeffs->g;
 		data[i + 9] = coeffs->b;
+
+		if (kcal->enabled)
+			sde_hw_kcal_pcc_adjust(data, i);
+
 		data[i + 12] = coeffs->rg;
 		data[i + 15] = coeffs->rb;
 		data[i + 18] = coeffs->gb;
@@ -1409,6 +1415,12 @@ void reg_dmav1_setup_dspp_pcc_common(struct sde_hw_dspp *ctx, void *cfg)
 	if (rc)
 		DRM_ERROR("failed to kick off ret %d\n", rc);
 
+	if (kcal->enabled) {
+		struct sde_hw_cp_cfg kcal_cfg = *hw_cfg;
+
+		reg_dmav1_setup_dspp_pa_hsicv17(ctx, &kcal_cfg);
+	}
+
 exit:
 	kvfree(data);
 
@@ -1445,11 +1457,21 @@ void reg_dmav1_setup_dspp_pa_hsicv17(struct sde_hw_dspp *ctx, void *cfg)
 	struct sde_hw_cp_cfg *hw_cfg = cfg;
 	struct sde_reg_dma_setup_ops_cfg dma_write_cfg;
 	struct drm_msm_pa_hsic *hsic_cfg;
+	struct drm_msm_pa_hsic kcal_hsic;
+	struct sde_hw_cp_cfg kcal_hw_cfg;
 	struct sde_hw_dspp *dspp_list[DSPP_MAX];
+	struct sde_hw_kcal *kcal = sde_hw_kcal_get();
 	u32 reg = 0, opcode = 0, local_opcode = 0;
 	int rc, i;
 	u32 num_of_mixers, blk = 0;
 
+	if (kcal->enabled) {
+		kcal_hsic = sde_hw_kcal_hsic_struct();
+		kcal_hw_cfg = *hw_cfg;
+		kcal_hw_cfg.payload = &kcal_hsic;
+		kcal_hw_cfg.len = sizeof(kcal_hsic);
+		hw_cfg = &kcal_hw_cfg;
+	}
 
 	opcode = SDE_REG_READ(&ctx->hw, ctx->cap->sblk->hsic.base);
 
