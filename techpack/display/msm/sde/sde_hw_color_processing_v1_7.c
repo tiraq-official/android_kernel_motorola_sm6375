@@ -6,6 +6,7 @@
 #include <drm/msm_drm_pp.h>
 #include "sde_hw_color_processing_v1_7.h"
 #include "sde_hw_ctl.h"
+#include "sde_hw_kcal_ctrl.h"
 
 #define REG_MASK_SHIFT(n, shift) ((REG_MASK(n)) << (shift))
 
@@ -279,6 +280,7 @@ void sde_setup_dspp_pa_hsic_v17(struct sde_hw_dspp *ctx, void *cfg)
 {
 	struct sde_hw_cp_cfg *hw_cfg = cfg;
 	struct drm_msm_pa_hsic *hsic_cfg;
+	struct sde_hw_kcal *kcal = sde_hw_kcal_get();
 	u32 hue = 0;
 	u32 sat = 0;
 	u32 val = 0;
@@ -308,6 +310,13 @@ void sde_setup_dspp_pa_hsic_v17(struct sde_hw_dspp *ctx, void *cfg)
 			val = hsic_cfg->value;
 		if (hsic_cfg->flags & PA_HSIC_CONT_ENABLE)
 			cont = hsic_cfg->contrast;
+	}
+
+	if (kcal->enabled) {
+		hue = kcal->hsic.hue;
+		sat = kcal->hsic.saturation;
+		val = kcal->hsic.value;
+		cont = kcal->hsic.contrast;
 	}
 
 	__setup_pa_hue(&ctx->hw, &ctx->cap->sblk->hsic, hue, DSPP);

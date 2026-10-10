@@ -19,6 +19,7 @@
 #include "sde_core_irq.h"
 #include "dsi_panel.h"
 #include "sde_hw_color_proc_common_v4.h"
+#include "sde_hw_kcal_ctrl.h"
 
 struct sde_cp_node {
 	u32 property_id;
@@ -1998,6 +1999,102 @@ static void _sde_clear_ltm_merge_mode(struct sde_crtc *sde_crtc)
 	spin_unlock_irqrestore(&sde_crtc->ltm_lock, irq_flags);
 }
 
+/*
+ * KCAL: the color-processing framework only pushes the DSPP PCC/HSIC blocks
+ * when userspace has enabled those features on the CRTC.  When they are not
+ * active the KCAL values never reach the hardware, so program them here on
+ * every commit with a neutral identity PCC/HSIC.  The KCAL values themselves
+ * are applied in the color-proc hooks (sde_hw_reg_dma_v1_color_proc.c and
+ * sde_hw_color_proc_v4.c / sde_hw_color_processing_v1_7.c), which scale the
+ * PCC diagonal and substitute the HSIC payload when KCAL is enabled.
+ */
+static bool sde_cp_crtc_kcal_feature_active(struct sde_crtc *sde_crtc,
+					    u32 feature)
+{
+	struct sde_cp_node *prop_node;
+
+	list_for_each_entry(prop_node, &sde_crtc->active_list, active_list)
+		if (prop_node->feature == feature)
+			return true;
+
+	list_for_each_entry(prop_node, &sde_crtc->dirty_list, dirty_list)
+		if (prop_node->feature == feature)
+			return true;
+
+	return false;
+}
+
+static void sde_cp_crtc_apply_kcal(struct sde_crtc *sde_crtc)
+{
+	struct sde_hw_cp_cfg hw_cfg;
+	struct drm_msm_pcc pcc;
+	struct drm_msm_pa_hsic hsic;
+	struct sde_hw_mixer *hw_lm;
+	struct sde_hw_dspp *hw_dspp;
+	struct sde_mdss_cfg *catalog;
+	u32 num_mixers = sde_crtc->num_mixers;
+	bool force_pcc, force_hsic;
+	int i;
+
+	if (!num_mixers)
+		return;
+
+	force_pcc = !sde_cp_crtc_kcal_feature_active(sde_crtc,
+						     SDE_CP_CRTC_DSPP_PCC);
+	force_hsic = !sde_cp_crtc_kcal_feature_active(sde_crtc,
+						      SDE_CP_CRTC_DSPP_HSIC);
+	if (!force_pcc && !force_hsic)
+		return;
+
+	/* neutral identity PCC, S3.15 (1.0 == 1 << 15) */
+	memset(&pcc, 0, sizeof(pcc));
+	pcc.r.r = 1 << 15;
+	pcc.g.g = 1 << 15;
+	pcc.b.b = 1 << 15;
+
+	hsic = sde_hw_kcal_hsic_struct();
+	hsic.hue = 0;
+	hsic.saturation = 255;
+	hsic.value = 255;
+	hsic.contrast = 255;
+
+	memset(&hw_cfg, 0, sizeof(hw_cfg));
+	hw_cfg.num_of_mixers = num_mixers;
+	for (i = 0; i < num_mixers; i++) {
+		hw_dspp = sde_crtc->mixers[i].hw_dspp;
+		if (!hw_dspp || i >= DSPP_MAX)
+			continue;
+		hw_cfg.dspp[i] = hw_dspp;
+	}
+
+	catalog = get_kms(&sde_crtc->base)->catalog;
+	hw_cfg.broadcast_disabled = catalog->dma_cfg.broadcast_disabled;
+
+	for (i = 0; i < num_mixers; i++) {
+		hw_lm = sde_crtc->mixers[i].hw_lm;
+		hw_dspp = sde_crtc->mixers[i].hw_dspp;
+		if (!hw_lm || !hw_dspp || i >= DSPP_MAX)
+			continue;
+
+		hw_cfg.ctl = sde_crtc->mixers[i].hw_ctl;
+		hw_cfg.mixer_info = hw_lm;
+		hw_cfg.displayh = num_mixers * hw_lm->cfg.out_width;
+		hw_cfg.displayv = hw_lm->cfg.out_height;
+
+		if (force_pcc && hw_dspp->ops.setup_pcc) {
+			hw_cfg.payload = &pcc;
+			hw_cfg.len = sizeof(pcc);
+			hw_dspp->ops.setup_pcc(hw_dspp, &hw_cfg);
+		}
+
+		if (force_hsic && hw_dspp->ops.setup_pa_hsic) {
+			hw_cfg.payload = &hsic;
+			hw_cfg.len = sizeof(hsic);
+			hw_dspp->ops.setup_pa_hsic(hw_dspp, &hw_cfg);
+		}
+	}
+}
+
 void sde_cp_crtc_apply_properties(struct drm_crtc *crtc)
 {
 	struct sde_crtc *sde_crtc = NULL;
@@ -2028,6 +2125,8 @@ void sde_cp_crtc_apply_properties(struct drm_crtc *crtc)
 
 	mutex_lock(&sde_crtc->crtc_cp_lock);
 	_sde_clear_ltm_merge_mode(sde_crtc);
+
+	sde_cp_crtc_apply_kcal(sde_crtc);
 
 	if (list_empty(&sde_crtc->dirty_list) &&
 			list_empty(&sde_crtc->ad_dirty) &&

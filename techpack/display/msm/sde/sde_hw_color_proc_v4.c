@@ -5,6 +5,7 @@
 #include <drm/msm_drm_pp.h>
 #include "sde_hw_color_proc_common_v4.h"
 #include "sde_hw_color_proc_v4.h"
+#include "sde_hw_kcal_ctrl.h"
 
 static int sde_write_3d_gamut(struct sde_hw_blk_reg_map *hw,
 		struct drm_msm_3d_gamut *payload, u32 base,
@@ -202,6 +203,7 @@ void sde_setup_dspp_pccv4(struct sde_hw_dspp *ctx, void *cfg)
 	struct sde_hw_cp_cfg *hw_cfg = cfg;
 	struct drm_msm_pcc *pcc_cfg;
 	struct drm_msm_pcc_coeff *coeffs = NULL;
+	struct sde_hw_kcal *kcal = sde_hw_kcal_get();
 	int i = 0;
 	u32 base = 0;
 
@@ -260,9 +262,15 @@ void sde_setup_dspp_pccv4(struct sde_hw_dspp *ctx, void *cfg)
 		}
 
 		SDE_REG_WRITE(&ctx->hw, base + PCC_C_OFF, coeffs->c);
-		SDE_REG_WRITE(&ctx->hw, base + PCC_R_OFF, coeffs->r);
-		SDE_REG_WRITE(&ctx->hw, base + PCC_G_OFF, coeffs->g);
-		SDE_REG_WRITE(&ctx->hw, base + PCC_B_OFF, coeffs->b);
+		SDE_REG_WRITE(&ctx->hw, base + PCC_R_OFF,
+			(kcal->enabled && i == 0) ?
+			(coeffs->r * kcal->pcc.red) / 256 : coeffs->r);
+		SDE_REG_WRITE(&ctx->hw, base + PCC_G_OFF,
+			(kcal->enabled && i == 1) ?
+			(coeffs->g * kcal->pcc.green) / 256 : coeffs->g);
+		SDE_REG_WRITE(&ctx->hw, base + PCC_B_OFF,
+			(kcal->enabled && i == 2) ?
+			(coeffs->b * kcal->pcc.blue) / 256 : coeffs->b);
 		SDE_REG_WRITE(&ctx->hw, base + PCC_RG_OFF, coeffs->rg);
 		SDE_REG_WRITE(&ctx->hw, base + PCC_RB_OFF, coeffs->rb);
 		SDE_REG_WRITE(&ctx->hw, base + PCC_GB_OFF, coeffs->gb);
