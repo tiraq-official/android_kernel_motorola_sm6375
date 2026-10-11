@@ -2031,9 +2031,10 @@ static void sde_cp_crtc_apply_kcal(struct sde_crtc *sde_crtc)
 	struct drm_msm_pa_hsic hsic;
 	struct sde_hw_mixer *hw_lm;
 	struct sde_hw_dspp *hw_dspp;
+	struct sde_hw_ctl *ctl;
 	struct sde_mdss_cfg *catalog;
 	u32 num_mixers = sde_crtc->num_mixers;
-	bool force_pcc, force_hsic;
+	bool force_pcc, force_hsic, programmed = false;
 	int i;
 
 	if (!num_mixers)
@@ -2085,12 +2086,28 @@ static void sde_cp_crtc_apply_kcal(struct sde_crtc *sde_crtc)
 			hw_cfg.payload = &pcc;
 			hw_cfg.len = sizeof(pcc);
 			hw_dspp->ops.setup_pcc(hw_dspp, &hw_cfg);
+			programmed = true;
 		}
 
 		if (force_hsic && hw_dspp->ops.setup_pa_hsic) {
 			hw_cfg.payload = &hsic;
 			hw_cfg.len = sizeof(hsic);
 			hw_dspp->ops.setup_pa_hsic(hw_dspp, &hw_cfg);
+			programmed = true;
+		}
+	}
+
+	/*
+	 * Latch the double-buffered DSPP registers, the same way the
+	 * color-processing framework does after programming a DSPP feature.
+	 * Without this the reg-dma writes above may not take effect.
+	 */
+	if (programmed) {
+		for (i = 0; i < num_mixers; i++) {
+			ctl = sde_crtc->mixers[i].hw_ctl;
+			hw_dspp = sde_crtc->mixers[i].hw_dspp;
+			if (ctl && ctl->ops.update_bitmask_dspp && hw_dspp)
+				ctl->ops.update_bitmask_dspp(ctl, hw_dspp->idx, 1);
 		}
 	}
 }
